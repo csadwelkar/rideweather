@@ -542,12 +542,15 @@ const emojiPlugin = {
 
       // white pill background behind all three labels
       const pillW  = 52, pillH = lineH * 3 + 6;
-      ctx.fillStyle = 'rgba(226,232,240,0.92)';
+      ctx.fillStyle = 'rgba(246,248,250,0.97)';
       ctx.beginPath();
       const rx = pillW / 2, ry = pillH / 2;
       const cx = pt.x, cy = yEmoji + (pillH / 2) - lineH / 2;
       ctx.roundRect(cx - rx, cy - ry, pillW, pillH, 6);
       ctx.fill();
+      ctx.strokeStyle = 'rgba(100,116,139,0.5)';
+      ctx.lineWidth = 0.75;
+      ctx.stroke();
 
       // wind (bottom row)
       ctx.font = '9px sans-serif';
