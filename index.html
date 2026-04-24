@@ -241,6 +241,36 @@
     .rain-bar { height: 5px; border-radius: 3px; min-width: 2px; }
 
     .temp-val { font-weight: 700; }
+
+    /* ── Chart weather tooltip ── */
+    .wx-tip {
+      position: absolute;
+      background: white;
+      border-radius: 14px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.14), 0 1px 4px rgba(0,0,0,0.08);
+      padding: 14px 18px;
+      pointer-events: none;
+      min-width: 200px;
+      z-index: 100;
+      transition: opacity .15s;
+      border-top: 4px solid #3b82f6;
+    }
+    .wx-tip-head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .wx-tip-icon { font-size: 28px; line-height: 1; }
+    .wx-tip-cond { font-size: 14px; font-weight: 700; color: #0f172a; }
+    .wx-tip-sub  { font-size: 11px; color: #94a3b8; margin-top: 1px; }
+    .wx-tip-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px 12px;
+    }
+    .wx-tip-item { font-size: 12px; color: #475569; }
+    .wx-tip-item strong { color: #0f172a; }
   </style>
 </head>
 <body>
@@ -311,7 +341,10 @@
 
     <div class="card">
       <div class="section-title">📈 Elevation Profile</div>
-      <div class="chart-wrap"><canvas id="elevChart"></canvas></div>
+      <div class="chart-wrap" style="height:240px;position:relative;">
+        <canvas id="elevChart"></canvas>
+        <div class="wx-tip" id="wxTip" style="display:none;"></div>
+      </div>
     </div>
 
     <div class="card">
@@ -333,6 +366,11 @@
           <tbody id="wxTable"></tbody>
         </table>
       </div>
+    </div>
+
+    <div class="card" id="summaryCard">
+      <div class="section-title">📋 Ride Summary</div>
+      <div id="summaryText" style="font-size:15px;line-height:1.7;color:#334155;"></div>
     </div>
 
   </div>
@@ -399,6 +437,11 @@ function tempColor(f) {
 // ── Time formatting ──────────────────────────────────────────────────────────
 function fmt(dt) {
   return dt.toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit', hour12:true });
+}
+function hhmm(decimalHours) {
+  const h = Math.floor(decimalHours);
+  const m = Math.round((decimalHours - h) * 60);
+  return `${h}<span class="stat-unit">h</span> ${String(m).padStart(2,'0')}<span class="stat-unit">m</span>`;
 }
 
 // ── Route ID extraction ──────────────────────────────────────────────────────
@@ -474,36 +517,97 @@ async function fetchWeather(lat, lng, dt) {
 
 // ── Elevation chart ───────────────────────────────────────────────────────────
 let _chart = null;
-function renderElevChart(wps) {
+let _chartWps = [];
+let _chartWx  = [];
+
+const emojiPlugin = {
+  id: 'emojiPlugin',
+  afterDatasetsDraw(chart) {
+    if (!_chartWx.length) return;
+    const ctx  = chart.ctx;
+    const meta = chart.getDatasetMeta(0);
+    meta.data.forEach((pt, i) => {
+      const wx = _chartWx[i];
+      if (!wx) return;
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      const lineH  = 15;           // px between label baselines
+      const gap    = 24;           // px clearance above the dot
+      // three rows, bottom-to-top: wind → temp → emoji
+      const yWind  = pt.y - gap - lineH * 0;
+      const yTemp  = pt.y - gap - lineH * 1;
+      const yEmoji = pt.y - gap - lineH * 2;
+
+      // white pill background behind all three labels
+      const pillW  = 52, pillH = lineH * 3 + 6;
+      ctx.fillStyle = 'rgba(226,232,240,0.92)';
+      ctx.beginPath();
+      const rx = pillW / 2, ry = pillH / 2;
+      const cx = pt.x, cy = yEmoji + (pillH / 2) - lineH / 2;
+      ctx.roundRect(cx - rx, cy - ry, pillW, pillH, 6);
+      ctx.fill();
+
+      // wind (bottom row)
+      ctx.font = '9px sans-serif';
+      ctx.fillStyle = '#64748b';
+      ctx.fillText(`${wx.wind.toFixed(0)}mph`, pt.x, yWind - 2);
+
+      // temp (middle row)
+      ctx.font = 'bold 11px sans-serif';
+      ctx.fillStyle = tempColor(wx.temp);
+      ctx.fillText(`${wx.temp.toFixed(0)}°F`, pt.x, yTemp);
+
+      // emoji (top row)
+      ctx.font = '13px serif';
+      ctx.fillStyle = 'black';
+      ctx.fillText(wmoIcon(wx.code), pt.x, yEmoji + 1);
+
+      ctx.restore();
+    });
+  },
+};
+
+function renderElevChart(wps, wxData) {
+  _chartWps = wps;
+  _chartWx  = wxData || [];
   if (_chart) _chart.destroy();
-  const ctx    = document.getElementById('elevChart').getContext('2d');
-  const labels = wps.map((w, i) =>
+
+  const canvas  = document.getElementById('elevChart');
+  const tip     = document.getElementById('wxTip');
+  const ctx     = canvas.getContext('2d');
+  const labels  = wps.map((w, i) =>
     i === 0 ? 'Start' : i === wps.length - 1 ? 'End' : `${w.distMiles.toFixed(0)} mi`);
-  const elev   = wps.map(w => +(w.ele * FT_PER_M).toFixed(0));
+  const elev    = wps.map(w => +(w.ele * FT_PER_M).toFixed(0));
+  const ptColors = '#3b82f6';
 
   _chart = new Chart(ctx, {
     type: 'line',
+    plugins: [emojiPlugin],
     data: {
       labels,
       datasets: [{
         data: elev,
         fill: true,
-        backgroundColor: 'rgba(59,130,246,0.10)',
+        backgroundColor: 'rgba(59,130,246,0.09)',
         borderColor: '#3b82f6',
         borderWidth: 2,
-        pointRadius: 4,
-        pointBackgroundColor: '#3b82f6',
+        pointRadius: 6,
+        pointHoverRadius: 8,
+        pointBackgroundColor: ptColors,
         pointBorderColor: 'white',
-        pointBorderWidth: 1.5,
+        pointBorderWidth: 2,
         tension: 0.4,
       }],
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      layout: { padding: { top: 58 } },
       plugins: {
         legend: { display: false },
-        tooltip: { callbacks: { label: ctx => `${Number(ctx.raw).toLocaleString()} ft` } },
+        tooltip: { enabled: false },
       },
       scales: {
         x: { grid: { display: false }, ticks: { font: { size: 11 }, color: '#94a3b8' } },
@@ -512,8 +616,46 @@ function renderElevChart(wps) {
           ticks: { font: { size: 11 }, color: '#94a3b8', callback: v => `${Number(v).toLocaleString()} ft` },
         },
       },
+      onHover(event, elements) {
+        if (!elements.length || !_chartWx.length) { tip.style.display = 'none'; return; }
+        const i  = elements[0].index;
+        const wp = _chartWps[i];
+        const wx = _chartWx[i];
+        if (!wp || !wx) { tip.style.display = 'none'; return; }
+
+        const isStart = i === 0, isEnd = i === _chartWps.length - 1;
+        const mileLabel = isStart ? 'Start' : isEnd ? 'End' : `Mile ${wp.distMiles.toFixed(1)}`;
+
+        tip.innerHTML = `
+          <div class="wx-tip-head">
+            <span class="wx-tip-icon">${wmoIcon(wx.code)}</span>
+            <div>
+              <div class="wx-tip-cond">${wmoDesc(wx.code)}</div>
+              <div class="wx-tip-sub">${mileLabel} · ${fmt(wp.dt)}</div>
+            </div>
+          </div>
+          <div class="wx-tip-grid">
+            <div class="wx-tip-item">🌡️ <strong style="color:${tempColor(wx.temp)}">${wx.temp.toFixed(1)}°F</strong></div>
+            <div class="wx-tip-item">🥶 feels <strong>${wx.feels.toFixed(1)}°F</strong></div>
+            <div class="wx-tip-item">🌧️ rain <strong>${wx.pct}%</strong></div>
+            <div class="wx-tip-item">💨 <strong>${wx.wind.toFixed(0)} mph ${windDir(wx.wdir)}</strong></div>
+            <div class="wx-tip-item">📍 <strong>${Math.round(wp.ele * FT_PER_M).toLocaleString()} ft</strong></div>
+          </div>`;
+
+        // Position tip — flip left if near right edge
+        const wrap  = canvas.parentElement.getBoundingClientRect();
+        const pt    = _chart.getDatasetMeta(0).data[i];
+        const tipW  = 220;
+        let left    = pt.x + 12;
+        if (left + tipW > wrap.width) left = pt.x - tipW - 12;
+        tip.style.left    = `${left}px`;
+        tip.style.top     = `${Math.max(0, pt.y - 60)}px`;
+        tip.style.display = 'block';
+      },
     },
   });
+
+  canvas.addEventListener('mouseleave', () => { tip.style.display = 'none'; });
 }
 
 // ── Weather table ─────────────────────────────────────────────────────────────
@@ -603,15 +745,15 @@ async function runQuery() {
     // 2. Waypoints
     const wps = buildWaypoints(track, interval, startDt, speed);
 
-    // 3. Chart
-    renderElevChart(wps);
-
-    // 4. Weather (sequential to avoid rate limits)
+    // 3. Weather (sequential to avoid rate limits)
     const wxData = [];
     for (let i = 0; i < wps.length; i++) {
       msgEl.textContent = `Fetching weather (${i + 1} / ${wps.length})…`;
       wxData.push(await fetchWeather(wps[i].lat, wps[i].lng, wps[i].dt));
     }
+
+    // 4. Chart (rendered after weather so dots + emojis are coloured)
+    renderElevChart(wps, wxData);
 
     // 5. Route header
     document.getElementById('routeName').textContent = route.name || 'Unnamed Route';
@@ -634,13 +776,14 @@ async function runQuery() {
         <div class="stat-label">Elevation Gain</div>
         <div class="stat-value">${Math.round(gainFt).toLocaleString()}<span class="stat-unit">ft</span></div>
       </div>
-      <div class="stat loss">
-        <div class="stat-label">Elevation Loss</div>
-        <div class="stat-value">${Math.round(lossFt).toLocaleString()}<span class="stat-unit">ft</span></div>
-      </div>
+
       <div class="stat time">
         <div class="stat-label">Ride Time</div>
-        <div class="stat-value">${(distMiles / speed).toFixed(1)}<span class="stat-unit">hrs</span></div>
+        <div class="stat-value">${hhmm(distMiles / speed)}</div>
+      </div>
+      <div class="stat purple">
+        <div class="stat-label">Finish Time</div>
+        <div class="stat-value" style="font-size:18px;">${fmt(new Date(startDt.getTime() + (distMiles / speed) * 3600000))}</div>
       </div>
       <div class="stat speed">
         <div class="stat-label">Avg Speed</div>
@@ -658,6 +801,10 @@ async function runQuery() {
 
     // 6. Table
     renderTable(wps, wxData, distMiles);
+
+    // 7. Summary
+    document.getElementById('summaryText').innerHTML =
+      generateSummary(wps, wxData, route, startDt, finishDt, distMiles, speed);
 
     loadingEl.style.display  = 'none';
     resultsEl.style.display  = 'block';
@@ -677,6 +824,73 @@ function showErr(msg) {
   el.style.display = 'block';
 }
 function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+function generateSummary(wps, wxData, route, startDt, finishDt, distMiles, speed) {
+  const temps    = wxData.map(w => w.temp);
+  const winds    = wxData.map(w => w.wind);
+  const rains    = wxData.map(w => w.pct);
+  const codes    = wxData.map(w => w.code);
+
+  const tempMin  = Math.min(...temps), tempMax = Math.max(...temps);
+  const windAvg  = winds.reduce((a,b) => a+b,0) / winds.length;
+  const windMax  = Math.max(...winds);
+  const rainMax  = Math.max(...rains);
+  const rainAvg  = rains.reduce((a,b) => a+b,0) / rains.length;
+
+  // Predominant condition
+  const freq = {};
+  codes.forEach(c => freq[c] = (freq[c]||0) + 1);
+  const topCode = parseInt(Object.entries(freq).sort((a,b) => b[1]-a[1])[0][0]);
+
+  // Highest point
+  const peakWp  = wps.reduce((a,b) => b.ele > a.ele ? b : a);
+  const peakFt  = Math.round(peakWp.ele * FT_PER_M);
+  const peakMile = peakWp.distMiles.toFixed(1);
+
+  // Temp trend
+  const tempTrend = tempMax - tempMin >= 5
+    ? `temperatures warming from ${Math.round(tempMin)}°F at the start to ${Math.round(tempMax)}°F by the finish`
+    : `temperatures staying steady around ${Math.round((tempMin+tempMax)/2)}°F throughout`;
+
+  // Wind description
+  const dominantDir = windDir(wxData.reduce((a,b) => b.wind > a.wind ? b : a).wdir);
+  let windDesc;
+  if (windAvg < 5)       windDesc = 'winds are calm — barely a breeze the whole way';
+  else if (windAvg < 10) windDesc = `light winds averaging ${windAvg.toFixed(0)} mph from the ${dominantDir}`;
+  else if (windAvg < 18) windDesc = `moderate winds averaging ${windAvg.toFixed(0)} mph from the ${dominantDir} — expect some resistance on exposed sections`;
+  else                   windDesc = `strong winds averaging ${windAvg.toFixed(0)} mph from the ${dominantDir} — factor this into your effort`;
+
+  // Rain description
+  let rainDesc;
+  if (rainMax <= 5)       rainDesc = 'no rain expected — roads should be dry all day';
+  else if (rainMax <= 20) rainDesc = `minimal rain chance (up to ${rainMax}%) — very unlikely to see any precipitation`;
+  else if (rainMax <= 50) rainDesc = `some chance of rain (up to ${rainMax}%) — consider packing a light jacket`;
+  else                    rainDesc = `high rain probability (up to ${rainMax}%) — rain gear is strongly recommended`;
+
+  // Overall conditions rating
+  const score = (rainMax <= 20 ? 2 : rainMax <= 50 ? 1 : 0)
+              + (windAvg < 10 ? 2 : windAvg < 18 ? 1 : 0)
+              + (tempMin >= 45 && tempMax <= 85 ? 2 : 1);
+  const rating = score >= 5 ? '🟢 Excellent riding conditions'
+               : score >= 3 ? '🟡 Decent riding conditions'
+               : '🔴 Challenging riding conditions';
+
+  // Condition description
+  const condDesc = [0,1,2].includes(topCode) ? 'clear skies'
+    : topCode === 3 ? 'overcast skies'
+    : [45,48].includes(topCode) ? 'foggy conditions early on'
+    : [51,53,55,61,63,65,80,81,82].includes(topCode) ? 'rainy conditions'
+    : [71,73,75].includes(topCode) ? 'snowy conditions'
+    : 'mixed conditions';
+
+  // Build paragraphs
+  const p1 = `<strong>${rating}.</strong> Expect ${condDesc} for most of this ${distMiles.toFixed(1)}-mile ride, with ${tempTrend}.`;
+  const p2 = `The highest point on the route is <strong>${peakFt.toLocaleString()} ft</strong> at mile ${peakMile}. ${windDesc.charAt(0).toUpperCase() + windDesc.slice(1)}.`;
+  const p3 = `Precipitation outlook: ${rainDesc}. ${rainAvg > 20 ? 'Keep an eye on forecasts the morning of your ride.' : 'No weather-related concerns anticipated.'}`;
+  const p4 = `You are set to roll at <strong>${fmt(startDt)}</strong> and finish around <strong>${fmt(finishDt)}</strong> — a total of ${hhmm(distMiles/speed)} at ${speed} mph.`;
+
+  return [p1, p2, p3, p4].map(p => `<p style="margin-bottom:10px;">${p}</p>`).join('');
+}
 
 document.addEventListener('keydown', e => { if (e.key === 'Enter') runQuery(); });
 </script>
