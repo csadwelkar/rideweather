@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RideWeather</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f0f4f8;
+      color: #1e293b;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%);
+      color: white;
+      padding: 18px 32px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.25);
+    }
+    .logo-icon { font-size: 32px; line-height: 1; }
+    .logo-text h1 { font-size: 20px; font-weight: 800; letter-spacing: -0.4px; }
+    .logo-text p  { font-size: 12px; opacity: 0.55; margin-top: 1px; }
+
+    /* ── Layout ── */
+    .container { max-width: 1120px; margin: 0 auto; padding: 28px 20px 60px; }
+
+    /* ── Card ── */
+    .card {
+      background: white;
+      border-radius: 18px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 20px rgba(0,0,0,0.06);
+      padding: 28px 32px;
+      margin-bottom: 22px;
+    }
+
+    /* ── Form ── */
+    .form-row {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr 1fr;
+      gap: 16px;
+      align-items: end;
+    }
+    .form-row2 {
+      display: grid;
+      grid-template-columns: 1fr 160px;
+      gap: 16px;
+      align-items: end;
+      margin-top: 14px;
+    }
+    @media (max-width: 760px) {
+      .form-row, .form-row2 { grid-template-columns: 1fr; }
+    }
+    .field label {
+      display: block;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: #94a3b8;
+      margin-bottom: 7px;
+    }
+    input, select {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 10px;
+      font-size: 14px;
+      color: #1e293b;
+      background: #f8fafc;
+      outline: none;
+      transition: border-color .15s, box-shadow .15s, background .15s;
+    }
+    input:focus, select:focus {
+      border-color: #3b82f6;
+      background: white;
+      box-shadow: 0 0 0 3px rgba(59,130,246,.12);
+    }
+
+    /* ── Button ── */
+    .btn-primary {
+      width: 100%;
+      padding: 11px 20px;
+      background: linear-gradient(135deg, #3b82f6, #2563eb);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      letter-spacing: 0.2px;
+      transition: transform .1s, box-shadow .15s, opacity .15s;
+    }
+    .btn-primary:hover  { box-shadow: 0 4px 14px rgba(37,99,235,.4); transform: translateY(-1px); }
+    .btn-primary:active { transform: none; }
+    .btn-primary:disabled { opacity: .55; cursor: not-allowed; transform: none; box-shadow: none; }
+
+    /* ── Error ── */
+    .error-box {
+      background: #fef2f2;
+      border: 1.5px solid #fecaca;
+      color: #b91c1c;
+      padding: 12px 18px;
+      border-radius: 10px;
+      font-size: 14px;
+      margin-bottom: 20px;
+      display: none;
+    }
+
+    /* ── Loading ── */
+    .loading-wrap {
+      text-align: center;
+      padding: 56px 20px;
+      display: none;
+    }
+    .spinner {
+      width: 44px; height: 44px;
+      border: 3px solid #e2e8f0;
+      border-top-color: #3b82f6;
+      border-radius: 50%;
+      animation: spin .75s linear infinite;
+      margin: 0 auto 16px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-wrap p { font-size: 14px; color: #64748b; }
+
+    /* ── Results ── */
+    .results { display: none; }
+
+    .route-name {
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: -.5px;
+      color: #0f172a;
+      margin-bottom: 6px;
+    }
+    .route-meta {
+      font-size: 13px;
+      color: #64748b;
+      margin-bottom: 22px;
+    }
+
+    /* ── Stat cards ── */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 14px;
+    }
+    .stat {
+      background: #f8fafc;
+      border-radius: 12px;
+      padding: 15px 18px;
+      border-left: 4px solid #3b82f6;
+    }
+    .stat.gain  { border-left-color: #10b981; }
+    .stat.loss  { border-left-color: #ef4444; }
+    .stat.time  { border-left-color: #8b5cf6; }
+    .stat.speed { border-left-color: #f59e0b; }
+    .stat-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: #94a3b8; margin-bottom: 5px; }
+    .stat-value { font-size: 24px; font-weight: 800; color: #0f172a; line-height: 1; }
+    .stat-unit  { font-size: 13px; font-weight: 500; color: #64748b; margin-left: 3px; }
+
+    /* ── Ride summary bar ── */
+    .ride-bar {
+      background: linear-gradient(135deg, #0f172a, #1e3a5f);
+      color: white;
+      border-radius: 12px;
+      padding: 14px 22px;
+      margin-top: 18px;
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px;
+      font-size: 13px;
+    }
+    .ride-bar span { opacity: .7; }
+    .ride-bar strong { opacity: 1; }
+
+    /* ── Section title ── */
+    .section-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #334155;
+      margin-bottom: 18px;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    /* ── Chart ── */
+    .chart-wrap { height: 210px; position: relative; }
+
+    /* ── Table ── */
+    .table-scroll { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    thead th {
+      text-align: left;
+      padding: 9px 14px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .6px;
+      color: #94a3b8;
+      border-bottom: 2px solid #f1f5f9;
+      white-space: nowrap;
+    }
+    tbody td {
+      padding: 13px 14px;
+      border-bottom: 1px solid #f1f5f9;
+      vertical-align: middle;
+    }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover td { background: #f8fafc; }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 54px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+      background: #eff6ff;
+      color: #1d4ed8;
+    }
+    .badge.start { background: #d1fae5; color: #065f46; }
+    .badge.end   { background: #fee2e2; color: #991b1b; }
+
+    .cond-cell { display: flex; align-items: center; gap: 8px; }
+    .wx-icon   { font-size: 22px; line-height: 1; }
+
+    .rain-row { display: flex; align-items: center; gap: 8px; }
+    .rain-bar { height: 5px; border-radius: 3px; min-width: 2px; }
+
+    .temp-val { font-weight: 700; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo-icon">🚴</div>
+  <div class="logo-text">
+    <h1>RideWeather</h1>
+    <p>Ride with GPS · weather along your route</p>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- ── Input form ── -->
+  <div class="card">
+    <div class="form-row">
+      <div class="field">
+        <label>Ride with GPS Route URL</label>
+        <input id="routeUrl" type="url" placeholder="https://ridewithgps.com/routes/32519600"
+               value="https://ridewithgps.com/routes/32519600">
+      </div>
+      <div class="field">
+        <label>Start Date</label>
+        <input id="startDate" type="date">
+      </div>
+      <div class="field">
+        <label>Start Time</label>
+        <input id="startTime" type="time" value="08:00">
+      </div>
+      <div class="field">
+        <label>Avg Speed (mph)</label>
+        <input id="avgSpeed" type="number" value="10" min="1" max="60" step="0.5">
+      </div>
+    </div>
+    <div class="form-row2">
+      <div class="field">
+        <label>Weather Checkpoints</label>
+        <select id="interval">
+          <option value="2.5">Every 2.5 miles</option>
+          <option value="5" selected>Every 5 miles</option>
+          <option value="10">Every 10 miles</option>
+        </select>
+      </div>
+      <div class="field">
+        <button class="btn-primary" id="btn" onclick="runQuery()">⚡ Get Weather</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="error-box" id="error"></div>
+
+  <!-- ── Loading ── -->
+  <div class="loading-wrap" id="loading">
+    <div class="spinner"></div>
+    <p id="loadingMsg">Fetching route data…</p>
+  </div>
+
+  <!-- ── Results ── -->
+  <div class="results" id="results">
+
+    <div class="card">
+      <div class="route-name" id="routeName"></div>
+      <div class="route-meta" id="routeMeta"></div>
+      <div class="stats-grid" id="statsGrid"></div>
+      <div class="ride-bar" id="rideBar"></div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">📈 Elevation Profile</div>
+      <div class="chart-wrap"><canvas id="elevChart"></canvas></div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">🌤 Weather Along the Route</div>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Mile</th>
+              <th>Time</th>
+              <th>Elevation</th>
+              <th>Condition</th>
+              <th>Temp</th>
+              <th>Feels Like</th>
+              <th>Rain %</th>
+              <th>Wind</th>
+            </tr>
+          </thead>
+          <tbody id="wxTable"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ── Constants ────────────────────────────────────────────────────────────────
+const M_PER_MILE = 1609.344;
+const FT_PER_M   = 3.28084;
+
+// ── Default date → next Sunday ───────────────────────────────────────────────
+(function () {
+  const d = new Date();
+  const daysUntilSunday = (7 - d.getDay()) % 7 || 7;
+  d.setDate(d.getDate() + daysUntilSunday);
+  document.getElementById('startDate').value = d.toISOString().slice(0, 10);
+})();
+
+// ── WMO weather code helpers ─────────────────────────────────────────────────
+const WMO_DESC = {
+  0:'Clear sky', 1:'Mainly clear', 2:'Partly cloudy', 3:'Overcast',
+  45:'Fog', 48:'Icy fog',
+  51:'Light drizzle', 53:'Drizzle', 55:'Heavy drizzle',
+  61:'Light rain', 63:'Rain', 65:'Heavy rain',
+  71:'Light snow', 73:'Snow', 75:'Heavy snow', 77:'Snow grains',
+  80:'Light showers', 81:'Showers', 82:'Heavy showers',
+  85:'Snow showers', 86:'Heavy snow showers',
+  95:'Thunderstorm', 96:'Tstorm + hail', 99:'Tstorm + heavy hail',
+};
+function wmoDesc(c) { return WMO_DESC[c] || `Code ${c}`; }
+function wmoIcon(c) {
+  if (c === 0)                        return '☀️';
+  if (c === 1)                        return '🌤️';
+  if (c === 2)                        return '⛅';
+  if (c === 3)                        return '☁️';
+  if ([45,48].includes(c))            return '🌫️';
+  if ([51,53,55].includes(c))         return '🌦️';
+  if ([61,63,65,80,81,82].includes(c))return '🌧️';
+  if ([71,73,75,77,85,86].includes(c))return '❄️';
+  if ([95,96,99].includes(c))         return '⛈️';
+  return '🌡️';
+}
+
+// ── Wind helpers ─────────────────────────────────────────────────────────────
+function windDir(deg) {
+  const d = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+  return d[Math.round(deg / 22.5) % 16];
+}
+function windArrow(deg) {
+  // arrow points in the direction wind is blowing TO
+  const rotate = `transform:rotate(${deg}deg);display:inline-block;margin-right:3px;`;
+  return `<span style="${rotate}">↑</span>`;
+}
+
+// ── Temperature colour ───────────────────────────────────────────────────────
+function tempColor(f) {
+  if (f < 35)  return '#60a5fa';
+  if (f < 50)  return '#34d399';
+  if (f < 65)  return '#fbbf24';
+  if (f < 80)  return '#f97316';
+  return '#ef4444';
+}
+
+// ── Time formatting ──────────────────────────────────────────────────────────
+function fmt(dt) {
+  return dt.toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit', hour12:true });
+}
+
+// ── Route ID extraction ──────────────────────────────────────────────────────
+function extractId(url) {
+  const m = url.match(/ridewithgps\.com\/routes\/(\d+)/);
+  return m ? m[1] : null;
+}
+
+// ── Interpolate track point ──────────────────────────────────────────────────
+function lerp(p1, p2, t) {
+  return {
+    lat: p1.lat + (p2.lat - p1.lat) * t,
+    lng: p1.lng + (p2.lng - p1.lng) * t,
+    ele: p1.ele + (p2.ele - p1.ele) * t,
+  };
+}
+
+// ── Build waypoints every N miles ────────────────────────────────────────────
+function buildWaypoints(track, intervalMiles, startDt, speedMph) {
+  const totalM   = track[track.length - 1].d;
+  const targets  = [];
+  for (let d = 0; d <= totalM; d += intervalMiles * M_PER_MILE) targets.push(d);
+  if (targets[targets.length - 1] < totalM - 1) targets.push(totalM);
+
+  const wps = [];
+  let ti = 0;
+  for (const td of targets) {
+    while (ti < track.length - 2 && track[ti + 1].d < td) ti++;
+    const a  = { lat: track[ti].y,     lng: track[ti].x,     ele: track[ti].e || 0,     d: track[ti].d };
+    const b  = { lat: track[ti+1].y,   lng: track[ti+1].x,   ele: track[ti+1].e || 0,   d: track[ti+1].d };
+    const span = b.d - a.d;
+    const frac = span > 0 ? (td - a.d) / span : 0;
+    const pt   = lerp(a, b, frac);
+    const distMiles = td / M_PER_MILE;
+    const dt = new Date(startDt.getTime() + (distMiles / speedMph) * 3600000);
+    wps.push({ ...pt, distMiles, dt });
+  }
+  return wps;
+}
+
+// ── Fetch Open-Meteo weather ──────────────────────────────────────────────────
+async function fetchWeather(lat, lng, dt) {
+  const dateStr = dt.toISOString().slice(0, 10);
+  const hour    = dt.getHours();
+  const params  = new URLSearchParams({
+    latitude:           lat.toFixed(5),
+    longitude:          lng.toFixed(5),
+    hourly:             'temperature_2m,apparent_temperature,precipitation_probability,precipitation,windspeed_10m,winddirection_10m,weathercode',
+    temperature_unit:   'fahrenheit',
+    windspeed_unit:     'mph',
+    precipitation_unit: 'inch',
+    timezone:           'America/Los_Angeles',
+    start_date:         dateStr,
+    end_date:           dateStr,
+  });
+  const res  = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`);
+  const data = await res.json();
+  if (data.error) throw new Error(data.reason || 'Weather API error');
+  const h   = data.hourly;
+  const key = `${dateStr}T${String(hour).padStart(2, '0')}:00`;
+  let idx   = h.time.indexOf(key);
+  if (idx < 0) idx = Math.min(hour, h.time.length - 1);
+  return {
+    temp:  h.temperature_2m[idx],
+    feels: h.apparent_temperature[idx],
+    pct:   h.precipitation_probability[idx],
+    precip:h.precipitation[idx],
+    wind:  h.windspeed_10m[idx],
+    wdir:  h.winddirection_10m[idx],
+    code:  h.weathercode[idx],
+  };
+}
+
+// ── Elevation chart ───────────────────────────────────────────────────────────
+let _chart = null;
+function renderElevChart(wps) {
+  if (_chart) _chart.destroy();
+  const ctx    = document.getElementById('elevChart').getContext('2d');
+  const labels = wps.map((w, i) =>
+    i === 0 ? 'Start' : i === wps.length - 1 ? 'End' : `${w.distMiles.toFixed(0)} mi`);
+  const elev   = wps.map(w => +(w.ele * FT_PER_M).toFixed(0));
+
+  _chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        data: elev,
+        fill: true,
+        backgroundColor: 'rgba(59,130,246,0.10)',
+        borderColor: '#3b82f6',
+        borderWidth: 2,
+        pointRadius: 4,
+        pointBackgroundColor: '#3b82f6',
+        pointBorderColor: 'white',
+        pointBorderWidth: 1.5,
+        tension: 0.4,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => `${Number(ctx.raw).toLocaleString()} ft` } },
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 11 }, color: '#94a3b8' } },
+        y: {
+          grid: { color: '#f1f5f9' },
+          ticks: { font: { size: 11 }, color: '#94a3b8', callback: v => `${Number(v).toLocaleString()} ft` },
+        },
+      },
+    },
+  });
+}
+
+// ── Weather table ─────────────────────────────────────────────────────────────
+function renderTable(wps, wxData, totalMiles) {
+  const tbody = document.getElementById('wxTable');
+  tbody.innerHTML = '';
+  wps.forEach((wp, i) => {
+    const wx     = wxData[i];
+    const isStart = i === 0;
+    const isEnd   = i === wps.length - 1;
+    const label   = isStart ? 'Start' : isEnd ? 'End' : wp.distMiles.toFixed(1);
+    const cls     = isStart ? 'start' : isEnd ? 'end' : '';
+    const elevFt  = Math.round(wp.ele * FT_PER_M).toLocaleString();
+
+    const rainW  = Math.max(3, (wx.pct || 0) * 0.85);
+    const rainC  = wx.pct > 50 ? '#2563eb' : wx.pct > 20 ? '#60a5fa' : '#bfdbfe';
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><span class="badge ${cls}">${label}</span></td>
+      <td style="font-weight:600;color:#334155;">${fmt(wp.dt)}</td>
+      <td style="font-variant-numeric:tabular-nums;">${elevFt} ft</td>
+      <td>
+        <div class="cond-cell">
+          <span class="wx-icon">${wmoIcon(wx.code)}</span>
+          <span style="font-size:13px;color:#334155;">${wmoDesc(wx.code)}</span>
+        </div>
+      </td>
+      <td><span class="temp-val" style="color:${tempColor(wx.temp)}">${wx.temp.toFixed(1)}°F</span></td>
+      <td style="color:#64748b;">${wx.feels.toFixed(1)}°F</td>
+      <td>
+        <div class="rain-row">
+          <span style="font-weight:600;min-width:34px;">${wx.pct}%</span>
+          <div class="rain-bar" style="width:${rainW}px;background:${rainC};"></div>
+        </div>
+      </td>
+      <td style="white-space:nowrap;">
+        ${windArrow(wx.wdir)}${wx.wind.toFixed(0)} mph ${windDir(wx.wdir)}
+      </td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+// ── Main ──────────────────────────────────────────────────────────────────────
+async function runQuery() {
+  const urlVal      = document.getElementById('routeUrl').value.trim();
+  const dateVal     = document.getElementById('startDate').value;
+  const timeVal     = document.getElementById('startTime').value;
+  const speed       = parseFloat(document.getElementById('avgSpeed').value);
+  const interval    = parseFloat(document.getElementById('interval').value);
+
+  const errEl       = document.getElementById('error');
+  const loadingEl   = document.getElementById('loading');
+  const resultsEl   = document.getElementById('results');
+  const msgEl       = document.getElementById('loadingMsg');
+  const btn         = document.getElementById('btn');
+
+  errEl.style.display     = 'none';
+  resultsEl.style.display = 'none';
+
+  const routeId = extractId(urlVal);
+  if (!routeId)       { return showErr('Invalid Ride with GPS URL — expected: https://ridewithgps.com/routes/12345'); }
+  if (!dateVal)       { return showErr('Please select a start date.'); }
+  if (!speed || speed <= 0) { return showErr('Please enter a valid average speed.'); }
+
+  const startDt = new Date(`${dateVal}T${timeVal || '08:00'}:00`);
+
+  btn.disabled = true;
+  loadingEl.style.display = 'block';
+  msgEl.textContent = 'Fetching route data…';
+
+  try {
+    // 1. Route
+    const rRes = await fetch(`/api/route?id=${routeId}`);
+    if (!rRes.ok) {
+      const body = await rRes.json().catch(() => ({}));
+      throw new Error(body.error || `Route not found (ID ${routeId})`);
+    }
+    const route = await rRes.json();
+
+    const distMiles = route.distance / M_PER_MILE;
+    const gainFt    = route.elevation_gain * FT_PER_M;
+    const lossFt    = route.elevation_loss * FT_PER_M;
+    const track     = route.track_points || [];
+    if (!track.length) throw new Error('No GPS track data in this route.');
+
+    // 2. Waypoints
+    const wps = buildWaypoints(track, interval, startDt, speed);
+
+    // 3. Chart
+    renderElevChart(wps);
+
+    // 4. Weather (sequential to avoid rate limits)
+    const wxData = [];
+    for (let i = 0; i < wps.length; i++) {
+      msgEl.textContent = `Fetching weather (${i + 1} / ${wps.length})…`;
+      wxData.push(await fetchWeather(wps[i].lat, wps[i].lng, wps[i].dt));
+    }
+
+    // 5. Route header
+    document.getElementById('routeName').textContent = route.name || 'Unnamed Route';
+
+    const metaParts = [
+      route.locality && route.administrative_area
+        ? `📍 ${route.locality}, ${route.administrative_area}` : null,
+      route.terrain   ? `⛰️ ${cap(route.terrain)}`   : null,
+      route.surface   ? `🛣️ ${cap(route.surface)}`   : null,
+      route.difficulty? `💪 ${cap(route.difficulty)}` : null,
+    ].filter(Boolean);
+    document.getElementById('routeMeta').textContent = metaParts.join('  ·  ');
+
+    document.getElementById('statsGrid').innerHTML = `
+      <div class="stat">
+        <div class="stat-label">Distance</div>
+        <div class="stat-value">${distMiles.toFixed(2)}<span class="stat-unit">mi</span></div>
+      </div>
+      <div class="stat gain">
+        <div class="stat-label">Elevation Gain</div>
+        <div class="stat-value">${Math.round(gainFt).toLocaleString()}<span class="stat-unit">ft</span></div>
+      </div>
+      <div class="stat loss">
+        <div class="stat-label">Elevation Loss</div>
+        <div class="stat-value">${Math.round(lossFt).toLocaleString()}<span class="stat-unit">ft</span></div>
+      </div>
+      <div class="stat time">
+        <div class="stat-label">Ride Time</div>
+        <div class="stat-value">${(distMiles / speed).toFixed(1)}<span class="stat-unit">hrs</span></div>
+      </div>
+      <div class="stat speed">
+        <div class="stat-label">Avg Speed</div>
+        <div class="stat-value">${speed}<span class="stat-unit">mph</span></div>
+      </div>
+    `;
+
+    const finishDt = new Date(startDt.getTime() + (distMiles / speed) * 3600000);
+    const fmtDate = d => d.toLocaleDateString('en-US', { weekday:'long', month:'short', day:'numeric' });
+    document.getElementById('rideBar').innerHTML = `
+      <div>🕗 <span>Start</span> <strong>${fmt(startDt)}</strong> <span>on ${fmtDate(startDt)}</span></div>
+      <div>🏁 <span>Finish</span> <strong>${fmt(finishDt)}</strong></div>
+      <div>📍 <span>${wps.length} checkpoints every ${interval} mi</span></div>
+    `;
+
+    // 6. Table
+    renderTable(wps, wxData, distMiles);
+
+    loadingEl.style.display  = 'none';
+    resultsEl.style.display  = 'block';
+    resultsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  } catch (e) {
+    loadingEl.style.display = 'none';
+    showErr(e.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function showErr(msg) {
+  const el = document.getElementById('error');
+  el.textContent = `⚠️  ${msg}`;
+  el.style.display = 'block';
+}
+function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+document.addEventListener('keydown', e => { if (e.key === 'Enter') runQuery(); });
+</script>
+</body>
+</html>

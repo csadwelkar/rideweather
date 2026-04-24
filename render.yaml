@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: rideweather
+    runtime: python
+    buildCommand: ""
+    startCommand: python3 app.py
+    envVars:
+      - key: PORT
+        generateValue: false
