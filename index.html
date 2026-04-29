@@ -385,7 +385,10 @@ const FT_PER_M   = 3.28084;
   const d = new Date();
   const daysUntilSunday = (7 - d.getDay()) % 7 || 7;
   d.setDate(d.getDate() + daysUntilSunday);
-  document.getElementById('startDate').value = d.toISOString().slice(0, 10);
+  const yyyy = d.getFullYear();
+  const mm   = String(d.getMonth() + 1).padStart(2, '0');
+  const dd   = String(d.getDate()).padStart(2, '0');
+  document.getElementById('startDate').value = `${yyyy}-${mm}-${dd}`;
 })();
 
 // ── WMO weather code helpers ─────────────────────────────────────────────────
